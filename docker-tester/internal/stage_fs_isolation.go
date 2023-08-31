@@ -1,8 +1,9 @@
 package internal
 
 import (
-	tester_utils "github.com/codecrafters-io/tester-utils"
 	"io/ioutil"
+
+	tester_utils "github.com/codecrafters-io/tester-utils"
 )
 
 func testFSIsolation(stageHarness *tester_utils.StageHarness) error {
@@ -26,7 +27,7 @@ func testFSIsolation(stageHarness *tester_utils.StageHarness) error {
 		return err
 	}
 
-	if err = assertStdoutContains(result, "No such file or directory"); err != nil {
+	if err = assertStdoutContains(result, "no such file or directory"); err != nil {
 		return err
 	}
 

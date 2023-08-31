@@ -13,5 +13,5 @@ sudo chmod +x /usr/local/bin/docker-explorer
 
 ```
 # Example
-./test_stage.sh 1
+sudo -E env "PATH=$PATH" ./test_stage.sh 1
 ```
