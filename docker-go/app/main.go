@@ -22,6 +22,10 @@ func main() {
 		}
 	}()
 
+	if err := syscall.Unshare(syscall.CLONE_NEWPID); err != nil {
+		log.Fatalf("Error unsharing: %v", err)
+	}
+
 	cmd := exec.Command(command, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
