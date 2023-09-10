@@ -1,13 +1,16 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"path"
 	"syscall"
+	"time"
 )
 
 // Usage: your_docker.sh run <image> <command> <arg1> <arg2> ...
@@ -36,6 +39,82 @@ func main() {
 	}
 }
 
+type registryToken struct {
+	Token       string    `json:"token"`
+	AccessToken string    `json:"access_token"`
+	ExpiresIn   int       `json:"expires_in"`
+	IssuedAt    time.Time `json:"issued_at"`
+}
+
+func getRegistryToken(image string) (registryToken, error) {
+	ret := registryToken{}
+
+	url := fmt.Sprintf("https://auth.docker.io/token?service=registry.docker.io&scope=repository:library/%s:pull,push", image)
+	resp, err := http.Get(url)
+	if err != nil {
+		return ret, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return ret, err
+	}
+
+	err = json.Unmarshal(body, &ret)
+	if err != nil {
+		return ret, err
+	}
+
+	return ret, nil
+}
+
+type imageManifest struct {
+	SchemaVersion int
+	MediaType     string
+	Config        struct {
+		MediaType string
+		Size      int
+		Digest    string
+	}
+	Layers []struct {
+		MediaType string
+		Size      int
+		Digest    string
+	}
+}
+
+func getImageManifest(image, token string) (imageManifest, error) {
+	ret := imageManifest{}
+
+	url := fmt.Sprintf("https://registry.hub.docker.com/v2/library/%s/manifests/latest", image)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return ret, err
+	}
+	req.Header.Add("Accept", "application/vnd.docker.distribution.manifest.v2+json")
+	req.Header.Add("Authorization", "Bearer "+token)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return ret, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return ret, err
+	}
+
+	err = json.Unmarshal(body, &ret)
+	if err != nil {
+		return ret, err
+	}
+
+	return ret, nil
+}
+
 func chroot(commandPath string) string {
 	rootPath, err := os.MkdirTemp("", "mydocker")
 	if err != nil {
@@ -47,7 +126,7 @@ func chroot(commandPath string) string {
 	}
 
 	binDirPath := path.Join(rootPath, path.Dir(commandPath))
-	if err := os.MkdirAll(binDirPath, 755); err != nil {
+	if err := os.MkdirAll(binDirPath, 0755); err != nil {
 		log.Fatalf("Error making dir: %v", err)
 	}
 
@@ -65,7 +144,7 @@ func chroot(commandPath string) string {
 
 func createDevNull(basePath string) (string, error) {
 	devDirPath := path.Join(basePath, "/dev")
-	if err := os.Mkdir(devDirPath, 755); err != nil {
+	if err := os.Mkdir(devDirPath, 0755); err != nil {
 		return "", err
 	}
 
@@ -76,7 +155,7 @@ func createDevNull(basePath string) (string, error) {
 	}
 	defer nullFile.Close()
 
-	if err := nullFile.Chmod(755); err != nil {
+	if err := nullFile.Chmod(0755); err != nil {
 		return "", err
 	}
 
@@ -100,7 +179,7 @@ func copyFile(srcPath, dstPath string) error {
 		return err
 	}
 
-	if err := dstFile.Chmod(755); err != nil {
+	if err := dstFile.Chmod(0755); err != nil {
 		return err
 	}
 
